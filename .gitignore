@@ -1,0 +1,15 @@
+# Build output
+/target/
+/dist/
+
+# Local launcher data: config.json contains account tokens, never commit it
+/data/
+/dist/data/
+config.json
+
+# Editor / OS
+.vscode/
+.idea/
+*.log
+Thumbs.db
+.DS_Store
