@@ -1,0 +1,78 @@
+name: Release
+
+# Builds the launcher on GitHub and creates a DRAFT release with the exe, SHA256SUMS.txt and release notes.
+# Nothing is public until you click "Publish release" on GitHub.
+#
+# Start it with: Actions > Release > Run workflow, enter the tag (for example v0.2.1).
+# Pushing a tag that starts with "v" works as well.
+# The version in Cargo.toml must match the tag (v0.2.1 needs version = "0.2.1").
+# The Azure client ID is read from the repository secret SMASH_CLIENT_ID.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag for the release, e.g. v0.2.1"
+        required: true
+        type: string
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      SMASH_CLIENT_ID: ${{ secrets.SMASH_CLIENT_ID }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check tag, version and secret
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Tag must look like v1.2.3, got: $TAG"; exit 1; }
+          VERSION="${TAG#v}"
+          CARGO_VERSION=$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
+          [ "$CARGO_VERSION" = "$VERSION" ] || { echo "Cargo.toml has version $CARGO_VERSION but the tag is $TAG"; exit 1; }
+          [ -n "$SMASH_CLIENT_ID" ] || { echo "Repository secret SMASH_CLIENT_ID is missing (Settings > Secrets and variables > Actions)"; exit 1; }
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists"; exit 1
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "A release for $TAG already exists"; exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Test
+        run: cargo test --locked
+
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Prepare release files
+        run: |
+          NAME="smash-launcher-v${VERSION}-windows-x64.exe"
+          mkdir out
+          cp target/release/smash-launcher.exe "out/$NAME"
+          HASH=$(sha256sum "out/$NAME" | cut -d' ' -f1)
+          printf '%s  %s\n' "$HASH" "$NAME" > out/SHA256SUMS.txt
+          sed -e "s|{{VERSION}}|$VERSION|g" -e "s|{{NAME}}|$NAME|g" -e "s|{{HASH}}|$HASH|g" .github/release-template.md > out/RELEASE_NOTES.md
+          ls -l out
+
+      - name: Create draft release
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            gh release create "$TAG" --draft --verify-tag --title "Smash Launcher $TAG" --notes-file out/RELEASE_NOTES.md \
+              "out/smash-launcher-v${VERSION}-windows-x64.exe" out/SHA256SUMS.txt
+          else
+            gh release create "$TAG" --draft --target "$GITHUB_SHA" --title "Smash Launcher $TAG" --notes-file out/RELEASE_NOTES.md \
+              "out/smash-launcher-v${VERSION}-windows-x64.exe" out/SHA256SUMS.txt
+          fi
+          echo "Draft release created. Review and publish it on the Releases page."

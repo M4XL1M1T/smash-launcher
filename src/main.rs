@@ -121,15 +121,15 @@ fn root_dir() -> Option<PathBuf> {
 fn prepare_folder(path: &str) -> Result<PathBuf, String> {
     let path = path.trim().trim_matches('"');
     if path.is_empty() {
-        return Err("Bitte einen Ordner angeben".into());
+        return Err("Please enter a folder".into());
     }
     let dir = PathBuf::from(path);
-    std::fs::create_dir_all(&dir).map_err(|e| format!("Ordner kann nicht angelegt werden: {e}"))?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Folder cannot be created: {e}"))?;
     let probe = dir.join(".write_test");
-    std::fs::write(&probe, "ok").map_err(|e| format!("Keine Schreibrechte in diesem Ordner: {e}"))?;
+    std::fs::write(&probe, "ok").map_err(|e| format!("No write permission in this folder: {e}"))?;
     let _ = std::fs::remove_file(probe);
     if !save_pointer(&dir) {
-        return Err("Die Ordnerwahl konnte nicht gespeichert werden".into());
+        return Err("The folder choice could not be saved".into());
     }
     Ok(dir)
 }
@@ -140,7 +140,7 @@ fn remove_profile_files(root: &std::path::Path, id: &str, with_data: bool) -> st
     let p = std::path::Path::new(id);
     let simple = p.components().count() == 1 && matches!(p.components().next(), Some(std::path::Component::Normal(_)));
     if !simple {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Ung\u{fc}ltiger Profilname"));
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Invalid profile name"));
     }
     let v = root.join("versions").join(id);
     if v.exists() {
@@ -170,13 +170,13 @@ impl Setup {
         egui::CentralPanel::default().frame(egui::Frame::none().fill(theme::STONE_DARK).inner_margin(28.0)).show(ctx, |ui| {
             theme::paint_dirt(ctx, ui.painter(), ui.max_rect().expand(28.0));
             ui.add_space(30.0);
-            ui.heading("Willkommen beim Smash Launcher");
+            ui.heading("Welcome to Smash Launcher");
             ui.add_space(8.0);
-            ui.label("W\u{e4}hle einen Ordner, in dem alles gespeichert wird: Minecraft-Versionen, Mods, Spielst\u{e4}nde, Java und deine Anmeldedaten. Plane mehrere GB Speicherplatz ein.");
+            ui.label("Choose a folder where everything is stored: Minecraft versions, mods, worlds, Java and your sign-in data. Plan for several GB of disk space.");
             ui.add_space(14.0);
             ui.horizontal(|ui| {
                 ui.add(egui::TextEdit::singleline(&mut self.path).desired_width(ui.available_width() - 120.0));
-                if ui.button("Durchsuchen ...").clicked() {
+                if ui.button("Browse ...").clicked() {
                     if let Some(p) = rfd::FileDialog::new().pick_folder() {
                         self.path = p.display().to_string();
                     }
@@ -193,7 +193,7 @@ impl Setup {
                 }
             }
             ui.add_space(10.0);
-            ui.weak("Die Anmeldedaten liegen unverschl\u{fc}sselt in diesem Ordner (config.json). Gib den Ordner nicht weiter.");
+            ui.weak("Your sign-in data is stored unencrypted in this folder (config.json). Do not share the folder.");
         });
         result
     }
@@ -227,12 +227,12 @@ impl eframe::App for Launcher {
 impl App {
     fn delete_profile(&mut self, id: String, with_data: bool) {
         if self.sh.lock().unwrap().busy {
-            self.sh.lock().unwrap().error = Some("W\u{e4}hrend Minecraft l\u{e4}uft oder etwas geladen wird, kann nichts gel\u{f6}scht werden".into());
+            self.sh.lock().unwrap().error = Some("Nothing can be deleted while Minecraft is running or something is loading".into());
             return;
         }
         let r = remove_profile_files(&self.root, &id, with_data);
         if let Err(e) = r {
-            self.sh.lock().unwrap().error = Some(format!("L\u{f6}schen fehlgeschlagen: {e}"));
+            self.sh.lock().unwrap().error = Some(format!("Delete failed: {e}"));
         }
         self.cfg.names.remove(&id);
         for a in &mut self.cfg.accounts {
@@ -251,13 +251,13 @@ impl App {
 
     fn home_ui(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         ui.horizontal(|ui| {
-            ui.heading("Profile");
+            ui.heading("Profiles");
             let can_rename = !self.selected.is_empty() && self.installed.contains(&self.selected);
-            if ui.add_enabled(can_rename, egui::Button::new("Umbenennen")).on_hover_text("Ausgew\u{e4}hltes Profil umbenennen (auch per Rechtsklick)").clicked() {
+            if ui.add_enabled(can_rename, egui::Button::new("Rename")).on_hover_text("Rename the selected profile (also via right click)").clicked() {
                 let cur = config::display(&self.cfg.names, &self.selected);
                 self.renaming = Some((self.selected.clone(), cur));
             }
-            if ui.add_enabled(can_rename, egui::Button::new("L\u{f6}schen")).on_hover_text("Ausgew\u{e4}hltes Profil l\u{f6}schen").clicked() {
+            if ui.add_enabled(can_rename, egui::Button::new("Delete")).on_hover_text("Delete the selected profile").clicked() {
                 self.deleting = Some(self.selected.clone());
             }
         });
@@ -272,7 +272,7 @@ impl App {
                 let sub = match kinds.get(id.as_str()).copied() {
                     Some("release") => "Vanilla",
                     Some("snapshot") => "Snapshot",
-                    Some("old_beta") | Some("old_alpha") => "Alt",
+                    Some("old_beta") | Some("old_alpha") => "Old",
                     _ => "Modpack",
                 };
                 (id.clone(), config::display(&self.cfg.names, id), sub.to_string())
@@ -307,7 +307,7 @@ impl App {
                     theme::paint_block(p, egui::Rect::from_min_size(rect.left_top() + egui::vec2(12.0, 16.0), egui::vec2(32.0, 32.0)), block);
                     p.text(rect.left_top() + egui::vec2(54.0, 14.0), egui::Align2::LEFT_TOP, &short, egui::FontId::proportional(16.0), theme::TEXT);
                     p.text(rect.left_top() + egui::vec2(54.0, 38.0), egui::Align2::LEFT_TOP, sub, egui::FontId::proportional(12.0), theme::WEAK);
-                    let resp = resp.on_hover_text(format!("{name}\nDoppelklick: starten, Rechtsklick: umbenennen oder l\u{f6}schen"));
+                    let resp = resp.on_hover_text(format!("{name}\nDouble click: start, right click: rename or delete"));
                     if resp.clicked() {
                         pick = Some(id.clone());
                     }
@@ -315,11 +315,11 @@ impl App {
                         launch = true;
                     }
                     resp.context_menu(|ui| {
-                        if ui.button("Umbenennen ...").clicked() {
+                        if ui.button("Rename ...").clicked() {
                             rename_req = Some(id.clone());
                             ui.close_menu();
                         }
-                        if ui.button("L\u{f6}schen ...").clicked() {
+                        if ui.button("Delete ...").clicked() {
                             delete_req = Some(id.clone());
                             ui.close_menu();
                         }
@@ -331,14 +331,14 @@ impl App {
                 p.rect_filled(rect, 0.0, if hov { theme::BTN_HOVER } else { theme::STONE });
                 p.rect_stroke(rect, 0.0, egui::Stroke::new(2.0_f32, if hov { theme::GREEN_LIGHT } else { theme::BTN }));
                 p.text(rect.center(), egui::Align2::CENTER_CENTER, "+", egui::FontId::proportional(34.0), if hov { theme::GREEN_LIGHT } else { theme::WEAK });
-                let plus = resp.on_hover_text("Neues Profil erstellen oder Modrinth-Modpack importieren");
+                let plus = resp.on_hover_text("Create a new profile or import a Modrinth modpack");
                 if plus.clicked() {
                     create = true;
                 }
             });
             if cards.is_empty() {
                 ui.add_space(8.0);
-                ui.weak("Noch kein Profil vorhanden. Mit + erstellst du eins oder importierst ein Modrinth-Modpack.");
+                ui.weak("No profile yet. Use + to create one or import a Modrinth modpack.");
             }
         });
         if let Some(p) = pick {
@@ -361,35 +361,35 @@ impl App {
 
     fn create_ui(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, busy: bool) {
         ui.horizontal(|ui| {
-            ui.heading("Neues Profil");
-            if ui.button("Zur\u{fc}ck").clicked() {
+            ui.heading("New profile");
+            if ui.button("Back").clicked() {
                 self.creating = false;
             }
         });
         ui.separator();
         ui.strong("Modrinth-Modpack");
         ui.horizontal(|ui| {
-            if ui.add_enabled(!busy, egui::Button::new("Modpack importieren (.mrpack)")).clicked() {
+            if ui.add_enabled(!busy, egui::Button::new("Import modpack (.mrpack)")).clicked() {
                 self.start_import(ctx, None);
             }
-            ui.weak("oder die .mrpack-Datei ins Fenster ziehen");
+            ui.weak("or drag the .mrpack file into the window");
         });
         ui.add_space(10.0);
-        ui.strong("Minecraft-Version (Vanilla)");
+        ui.strong("Minecraft version (vanilla)");
         ui.horizontal_wrapped(|ui| {
             ui.checkbox(&mut self.show_release, "Releases");
             ui.checkbox(&mut self.show_snapshot, "Snapshots");
             ui.checkbox(&mut self.show_old, "Beta/Alpha");
-            ui.add(egui::TextEdit::singleline(&mut self.search).hint_text("Suchen").desired_width(120.0));
+            ui.add(egui::TextEdit::singleline(&mut self.search).hint_text("Search").desired_width(120.0));
         });
         ui.horizontal(|ui| {
             let sel_ok = !self.selected.is_empty() && !self.installed.contains(&self.selected);
-            let label = if self.selected.is_empty() { "Version ausw\u{e4}hlen".to_string() } else { format!("{} hinzuf\u{fc}gen, ohne zu starten", self.selected) };
+            let label = if self.selected.is_empty() { "Select a version".to_string() } else { format!("Add {} without starting", self.selected) };
             if ui.add_enabled(!busy && sel_ok, egui::Button::new(label)).clicked() {
                 self.start_install_only(ctx);
             }
             if !self.selected.is_empty() && self.installed.contains(&self.selected) {
-                ui.weak("Diese Version ist schon als Profil vorhanden.");
+                ui.weak("This version already exists as a profile.");
             }
         });
         ui.separator();
@@ -409,11 +409,11 @@ impl App {
         let mut pick: Option<String> = None;
         egui::ScrollArea::vertical().id_salt("versions").auto_shrink([false, false]).show_rows(ui, h, list.len(), |ui, range| {
             for r in &list[range] {
-                let inst = if self.installed.contains(&r.id) { "  [vorhanden]" } else { "" };
+                let inst = if self.installed.contains(&r.id) { "  [installed]" } else { "" };
                 let kind = match r.kind.as_str() {
                     "release" => "",
                     "snapshot" => "  Snapshot",
-                    _ => "  Alt",
+                    _ => "  Old",
                 };
                 if ui.selectable_label(self.selected == r.id, format!("{}{kind}{inst}", r.id)).clicked() {
                     pick = Some(r.id.clone());
@@ -452,7 +452,7 @@ impl App {
             s.progress = 0.0;
             match r {
                 Ok(()) => {
-                    s.status = format!("Profil hinzugef\u{fc}gt: {id}");
+                    s.status = format!("Profile added: {id}");
                     s.select = Some(id);
                     s.refresh_installed = true;
                 }
@@ -469,32 +469,32 @@ impl App {
         let mut changed = false;
         let mut check_now = false;
         ui.horizontal(|ui| {
-            ui.heading("Einstellungen");
-            if ui.button("Zur\u{fc}ck zu den Versionen").clicked() {
+            ui.heading("Settings");
+            if ui.button("Back to versions").clicked() {
                 self.settings_open = false;
             }
         });
         ui.horizontal(|ui| {
             ui.selectable_value(&mut self.settings_tab, 0, "Audio");
-            ui.selectable_value(&mut self.settings_tab, 1, "Grafik und Anzeige");
+            ui.selectable_value(&mut self.settings_tab, 1, "Graphics and display");
             ui.selectable_value(&mut self.settings_tab, 2, "Launcher");
         });
         ui.separator();
         let tab = self.settings_tab;
         egui::ScrollArea::vertical().id_salt("settings").auto_shrink([false, false]).show(ui, |ui| {
             if tab != 2 {
-                ui.weak("Diese Werte werden vor jedem Start in die options.txt des Profils geschrieben. Nur Werte mit gesetztem Haken werden \u{fc}berschrieben, alles andere bleibt, wie es im Spiel eingestellt ist.");
+                ui.weak("These values are written into the profile\'s options.txt before every start. Only values with a checkmark are overwritten, everything else stays as set in the game.");
                 ui.add_space(8.0);
             }
             match tab {
                 0 => {
                     let g = &mut self.cfg.game;
-                    ui.strong("Lautst\u{e4}rke");
+                    ui.strong("Volume");
                     ui.add_space(4.0);
                     ui.horizontal_wrapped(|ui| {
-                        ui.label("Alle Regler (ohne Master) auf");
+                        ui.label("Set all sliders (except master) to");
                         ui.add(egui::Slider::new(&mut self.bulk_pct, 0..=100).suffix(" %"));
-                        if ui.button("Setzen und aktivieren").clicked() {
+                        if ui.button("Set and enable").clicked() {
                             for (id, _) in options::SOUNDS.iter().filter(|(id, _)| *id != "master") {
                                 *g.volume_mut(id) = options::Volume { on: true, pct: self.bulk_pct };
                             }
@@ -502,13 +502,13 @@ impl App {
                         }
                     });
                     ui.horizontal(|ui| {
-                        if ui.button("Alle aktivieren").clicked() {
+                        if ui.button("Enable all").clicked() {
                             for (id, _) in options::SOUNDS {
                                 g.volume_mut(id).on = true;
                             }
                             changed = true;
                         }
-                        if ui.button("Alle deaktivieren").clicked() {
+                        if ui.button("Disable all").clicked() {
                             for (id, _) in options::SOUNDS {
                                 g.volume_mut(id).on = false;
                             }
@@ -525,25 +525,25 @@ impl App {
                         }
                     });
                     ui.add_space(6.0);
-                    ui.weak("Hinweis: Die Gesamtlautst\u{e4}rke wird mit jedem einzelnen Regler multipliziert. Master 30 % und Musik 30 % ergeben im Spiel etwa 9 %.");
+                    ui.weak("Note: the master volume is multiplied with each individual slider. Master 30 % and music 30 % result in about 9 % in game.");
                     ui.add_space(14.0);
-                    ui.strong("Weitere Audio-Optionen");
+                    ui.strong("More audio options");
                     ui.add_space(4.0);
                     egui::Grid::new("sound_misc").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
-                        changed |= ui.checkbox(&mut g.subtitles_on, "Untertitel").changed();
-                        changed |= ui.add_enabled(g.subtitles_on, egui::Checkbox::new(&mut g.subtitles, "anzeigen")).changed();
+                        changed |= ui.checkbox(&mut g.subtitles_on, "Subtitles").changed();
+                        changed |= ui.add_enabled(g.subtitles_on, egui::Checkbox::new(&mut g.subtitles, "show")).changed();
                         ui.end_row();
-                        changed |= ui.checkbox(&mut g.directional_on, "Richtungsabh\u{e4}ngiges Audio").changed();
-                        changed |= ui.add_enabled(g.directional_on, egui::Checkbox::new(&mut g.directional, "einschalten")).changed();
+                        changed |= ui.checkbox(&mut g.directional_on, "Directional audio").changed();
+                        changed |= ui.add_enabled(g.directional_on, egui::Checkbox::new(&mut g.directional, "turn on")).changed();
                         ui.end_row();
                     });
                 }
                 1 => {
                     let g = &mut self.cfg.game;
-                    ui.strong("Grafik und Anzeige");
+                    ui.strong("Graphics and display");
                     ui.add_space(4.0);
                     egui::Grid::new("game_opts").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
-                        changed |= ui.checkbox(&mut g.gui_on, "GUI-Gr\u{f6}\u{df}e").changed();
+                        changed |= ui.checkbox(&mut g.gui_on, "GUI scale").changed();
                         ui.add_enabled_ui(g.gui_on, |ui| {
                             let label = if g.gui_scale == 0 { "Auto".to_string() } else { format!("{}x", g.gui_scale) };
                             egui::ComboBox::from_id_salt("gui_scale").selected_text(label).show_ui(ui, |ui| {
@@ -555,50 +555,50 @@ impl App {
                             });
                         });
                         ui.end_row();
-                        changed |= ui.checkbox(&mut g.fov_on, "Sichtfeld (FOV)").changed();
+                        changed |= ui.checkbox(&mut g.fov_on, "Field of view (FOV)").changed();
                         changed |= ui.add_enabled(g.fov_on, egui::Slider::new(&mut g.fov, 30..=110)).changed();
                         ui.end_row();
-                        changed |= ui.checkbox(&mut g.fps_on, "Maximale FPS").changed();
+                        changed |= ui.checkbox(&mut g.fps_on, "Max FPS").changed();
                         changed |= ui.add_enabled(g.fps_on, egui::Slider::new(&mut g.max_fps, 10..=260)).changed();
                         ui.end_row();
-                        changed |= ui.checkbox(&mut g.dist_on, "Sichtweite (Chunks)").changed();
+                        changed |= ui.checkbox(&mut g.dist_on, "Render distance (chunks)").changed();
                         changed |= ui.add_enabled(g.dist_on, egui::Slider::new(&mut g.render_distance, 2..=32)).changed();
                         ui.end_row();
-                        changed |= ui.checkbox(&mut g.fullscreen_on, "Vollbild").changed();
-                        changed |= ui.add_enabled(g.fullscreen_on, egui::Checkbox::new(&mut g.fullscreen, "beim Start")).changed();
+                        changed |= ui.checkbox(&mut g.fullscreen_on, "Fullscreen").changed();
+                        changed |= ui.add_enabled(g.fullscreen_on, egui::Checkbox::new(&mut g.fullscreen, "on start")).changed();
                         ui.end_row();
                     });
                 }
                 _ => {
                     ui.strong("Launcher");
                     ui.add_space(6.0);
-                    ui.label("Arbeitsspeicher f\u{fc}r Minecraft");
+                    ui.label("Memory for Minecraft");
                     changed |= ui.add(egui::Slider::new(&mut self.cfg.ram_mb, 1024..=16384).step_by(256.0).suffix(" MB")).changed();
                     ui.add_space(6.0);
-                    ui.label("Java-Pfad (leer = automatisch die passende Version laden)");
+                    ui.label("Java path (empty = download the matching version automatically)");
                     if ui.text_edit_singleline(&mut self.cfg.java_path).lost_focus() {
                         changed = true;
                     }
                     ui.add_space(6.0);
-                    ui.label("Azure Client-ID (leer = eingebaute ID)");
+                    ui.label("Azure client ID (empty = built-in ID)");
                     if ui.text_edit_singleline(&mut self.cfg.ms_client_id).lost_focus() {
                         changed = true;
                     }
                     ui.add_space(10.0);
                     ui.strong("Updates");
-                    changed |= ui.checkbox(&mut self.cfg.check_updates, "Beim Start auf neue Versionen pr\u{fc}fen (GitHub)").changed();
+                    changed |= ui.checkbox(&mut self.cfg.check_updates, "Check for new versions on start (GitHub)").changed();
                     let msg = self.sh.lock().unwrap().update_msg.clone();
                     ui.horizontal(|ui| {
-                        ui.label(format!("Installiert: {}", update::CURRENT));
-                        if ui.button("Jetzt nach Updates suchen").clicked() {
+                        ui.label(format!("Installed: {}", update::CURRENT));
+                        if ui.button("Check for updates now").clicked() {
                             check_now = true;
                         }
                         ui.label(msg);
                     });
                     ui.add_space(6.0);
                     ui.horizontal(|ui| {
-                        ui.label(format!("Datenordner: {}", self.root.display()));
-                        if ui.button("\u{d6}ffnen").clicked() {
+                        ui.label(format!("Data folder: {}", self.root.display()));
+                        if ui.button("Open").clicked() {
                             let _ = std::process::Command::new("explorer").arg(&self.root).spawn();
                         }
                     });
@@ -621,7 +621,7 @@ impl App {
             std::thread::spawn(move || {
                 match game::fetch_manifest(&root) {
                     Ok(m) => sh.lock().unwrap().manifest = Some(m),
-                    Err(e) => sh.lock().unwrap().error = Some(format!("Versionsliste konnte nicht geladen werden: {e}")),
+                    Err(e) => sh.lock().unwrap().error = Some(format!("Version list could not be loaded: {e}")),
                 }
                 ctx.request_repaint();
             });
@@ -711,7 +711,7 @@ impl App {
     fn start_update_check(&mut self, ctx: &egui::Context, manual: bool) {
         if manual {
             self.update_dismissed = false;
-            self.sh.lock().unwrap().update_msg = "Suche ...".into();
+            self.sh.lock().unwrap().update_msg = "Checking ...".into();
         }
         let (sh, ctx) = (self.sh.clone(), ctx.clone());
         std::thread::spawn(move || {
@@ -720,11 +720,11 @@ impl App {
                 let mut s = sh.lock().unwrap();
                 match r {
                     Ok(Some(info)) => {
-                        s.update_msg = format!("Version {} ist verf\u{fc}gbar", info.version);
+                        s.update_msg = format!("Version {} is available", info.version);
                         s.update = Some(info);
                     }
-                    Ok(None) => s.update_msg = if manual { "Du hast die neueste Version.".into() } else { String::new() },
-                    Err(e) => s.update_msg = if manual { format!("Update-Suche fehlgeschlagen: {e}") } else { String::new() },
+                    Ok(None) => s.update_msg = if manual { "You have the latest version.".into() } else { String::new() },
+                    Err(e) => s.update_msg = if manual { format!("Update check failed: {e}") } else { String::new() },
                 }
             }
             ctx.request_repaint();
@@ -756,13 +756,13 @@ impl App {
             s.progress = 0.0;
             match r {
                 Ok(()) => {
-                    s.status = "Update installiert, Neustart ...".into();
+                    s.status = "Update installed, restarting ...".into();
                     s.update = None;
                     s.update_restart = true;
                 }
                 Err(e) => {
                     s.status.clear();
-                    s.error = Some(format!("Update fehlgeschlagen: {e}"));
+                    s.error = Some(format!("Update failed: {e}"));
                 }
             }
             drop(s);
@@ -778,7 +778,7 @@ impl App {
         let cid = self.cfg.client_id();
         if cid.is_empty() {
             self.sh.lock().unwrap().error =
-                Some("Keine Client-ID hinterlegt. Bitte in den Einstellungen eine Azure Client-ID eintragen (siehe README).".into());
+                Some("No client ID configured. Please enter an Azure client ID in the settings (see README).".into());
             self.settings_open = true;
             return;
         }
@@ -826,7 +826,7 @@ impl App {
             let r = (|| -> Result<Option<(String, String)>> {
                 let file = match file {
                     Some(f) => f,
-                    None => match rfd::FileDialog::new().add_filter("Modrinth Modpack", &["mrpack"]).pick_file() {
+                    None => match rfd::FileDialog::new().add_filter("Modrinth modpack", &["mrpack"]).pick_file() {
                         Some(f) => f,
                         None => return Ok(None),
                     },
@@ -838,7 +838,7 @@ impl App {
             s.progress = 0.0;
             match r {
                 Ok(Some((id, name))) => {
-                    s.status = format!("Modpack importiert: {name}");
+                    s.status = format!("Modpack imported: {name}");
                     s.new_names.push((id.clone(), name));
                     s.select = Some(id);
                     s.refresh_installed = true;
@@ -858,11 +858,11 @@ impl App {
             return;
         }
         let Some(acc) = self.selected_account().cloned() else {
-            self.sh.lock().unwrap().error = Some("Bitte zuerst einen Account hinzuf\u{fc}gen und ausw\u{e4}hlen".into());
+            self.sh.lock().unwrap().error = Some("Please add and select an account first".into());
             return;
         };
         if self.selected.is_empty() {
-            self.sh.lock().unwrap().error = Some("Bitte eine Version ausw\u{e4}hlen".into());
+            self.sh.lock().unwrap().error = Some("Please select a version".into());
             return;
         }
         self.cfg.last_version = self.selected.clone();
@@ -895,8 +895,8 @@ impl App {
             };
             let r = (|| -> Result<i32> {
                 // Online only: ownership of the game is verified by the profile request on every launch.
-                status("Anmeldung pr\u{fc}fen", 0.0);
-                let Some(rt) = acc.refresh_token.clone() else { bail!("Kein Refresh-Token, bitte Account neu anmelden") };
+                status("Checking sign-in", 0.0);
+                let Some(rt) = acc.refresh_token.clone() else { bail!("No refresh token, please sign in to the account again") };
                 let (access, new_rt) = auth::refresh(&cid, &rt)?;
                 let (token, name, uuid) = auth::minecraft_login(&access)?;
                 sh.lock().unwrap().updates.push(Account { kind: Kind::Microsoft, name: name.clone(), uuid: uuid.clone(), refresh_token: Some(new_rt), recent: vec![] });
@@ -905,14 +905,14 @@ impl App {
                 sh.lock().unwrap().refresh_installed = true;
                 let java = game::ensure_java(&root, &v, &java_path, &status)?;
                 let _ = options::apply(&root.join("instances").join(&id), &game_opts);
-                status("Minecraft l\u{e4}uft", 1.0);
+                status("Minecraft is running", 1.0);
                 game::run_game(&root, &v, &session, &java, ram, &log)
             })();
             let mut s = sh.lock().unwrap();
             s.busy = false;
             s.progress = 0.0;
             match r {
-                Ok(code) => s.status = format!("Minecraft beendet (Exit-Code {code})"),
+                Ok(code) => s.status = format!("Minecraft exited (exit code {code})"),
                 Err(e) => {
                     s.status.clear();
                     s.error = Some(e.to_string());
@@ -944,14 +944,14 @@ impl eframe::App for App {
         if let Some(info) = pending_update {
             egui::TopBottomPanel::top("update").frame(egui::Frame::none().fill(theme::GREEN_DARK).inner_margin(egui::Margin::symmetric(14.0, 6.0))).show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new(format!("Neue Version {} verf\u{fc}gbar (installiert: {})", info.version, update::CURRENT)).strong().color(egui::Color32::WHITE));
-                    if ui.add_enabled(!busy, egui::Button::new("Jetzt aktualisieren")).on_hover_text("L\u{e4}dt die neue Version von GitHub, pr\u{fc}ft die Pr\u{fc}fsumme und startet den Launcher neu").clicked() {
+                    ui.label(egui::RichText::new(format!("New version {} available (installed: {})", info.version, update::CURRENT)).strong().color(egui::Color32::WHITE));
+                    if ui.add_enabled(!busy, egui::Button::new("Update now")).on_hover_text("Downloads the new version from GitHub, verifies the checksum and restarts the launcher").clicked() {
                         self.start_update_install(ctx, info.clone());
                     }
                     if !info.page.is_empty() {
-                        ui.hyperlink_to("Was ist neu?", &info.page);
+                        ui.hyperlink_to("What\'s new?", &info.page);
                     }
-                    if ui.small_button("Sp\u{e4}ter").clicked() {
+                    if ui.small_button("Later").clicked() {
                         self.update_dismissed = true;
                     }
                 });
@@ -963,7 +963,19 @@ impl eframe::App for App {
             ui.label(egui::RichText::new("SMASH").monospace().size(30.0).strong().color(theme::GREEN_LIGHT));
             ui.label(egui::RichText::new("LAUNCHER").monospace().size(14.0).color(theme::TEXT));
             ui.add_space(8.0);
-            ui.heading("Accounts");
+            let mut add_account = false;
+            ui.horizontal(|ui| {
+                let head = ui.heading("Accounts");
+                let size = egui::vec2(ui.available_width(), head.rect.height());
+                ui.allocate_ui_with_layout(size, egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if !login_busy && device.is_none() {
+                        let plus = ui
+                            .add(egui::Button::new(egui::RichText::new("+").size(15.0).strong().color(egui::Color32::WHITE)).fill(theme::GREEN).stroke(egui::Stroke::new(2.0_f32, theme::GREEN_DARK)).min_size(egui::vec2(24.0, 24.0)))
+                            .on_hover_text("Add account (Microsoft sign-in, Minecraft: Java Edition must be owned)");
+                        add_account = plus.clicked();
+                    }
+                });
+            });
             ui.separator();
             let mut remove: Option<usize> = None;
             let mut pick_recent: Option<(String, String)> = None;
@@ -973,7 +985,7 @@ impl eframe::App for App {
                     if ui.selectable_label(a.key() == self.cfg.selected, &a.name).clicked() {
                         self.cfg.selected = a.key();
                     }
-                    if ui.small_button("x").on_hover_text("Account entfernen").clicked() {
+                    if ui.small_button("x").on_hover_text("Remove account").clicked() {
                         remove = Some(i);
                     }
                 });
@@ -982,7 +994,7 @@ impl eframe::App for App {
                         ui.add_space(14.0);
                         let active = a.key() == self.cfg.selected && self.selected == *v;
                         let text = egui::RichText::new(config::display(&self.cfg.names, v)).small();
-                        let resp = ui.selectable_label(active, text).on_hover_text("Klick: ausw\u{e4}hlen, Doppelklick: starten");
+                        let resp = ui.selectable_label(active, text).on_hover_text("Click: select, double click: start");
                         if resp.clicked() || resp.double_clicked() {
                             pick_recent = Some((a.key(), v.clone()));
                         }
@@ -1008,35 +1020,32 @@ impl eframe::App for App {
             }
             if let Some((code, uri)) = &device {
                 ui.separator();
-                ui.label("1. Seite \u{f6}ffnen:");
+                ui.label("1. Open this page:");
                 ui.hyperlink(uri);
-                ui.label("2. Diesen Code eingeben:");
+                ui.label("2. Enter this code:");
                 ui.label(egui::RichText::new(code).monospace().size(22.0).strong());
                 ui.horizontal(|ui| {
-                    if ui.button("Code kopieren").clicked() {
+                    if ui.button("Copy code").clicked() {
                         ctx.copy_text(code.clone());
                     }
-                    if ui.button("Abbrechen").clicked() {
+                    if ui.button("Cancel").clicked() {
                         self.cancel.store(true, Ordering::SeqCst);
                     }
                 });
-                ui.weak("Warte auf Best\u{e4}tigung ...");
+                ui.weak("Waiting for confirmation ...");
             } else if login_busy {
-                ui.weak("Anmeldung wird vorbereitet ...");
+                ui.weak("Preparing sign-in ...");
             } else {
-                let plus = ui
-                    .add(egui::Button::new(egui::RichText::new("+").size(22.0).strong().color(egui::Color32::WHITE)).fill(theme::GREEN).stroke(egui::Stroke::new(2.0_f32, theme::GREEN_DARK)).min_size(egui::vec2(44.0, 36.0)))
-                    .on_hover_text("Account hinzuf\u{fc}gen (Microsoft-Login, Minecraft Java muss gekauft sein)");
-                if plus.clicked() {
-                    self.start_microsoft_login(ctx);
-                }
                 if self.cfg.accounts.is_empty() {
-                    ui.weak("Mit + einen Account hinzuf\u{fc}gen");
+                    ui.weak("Add an account with +");
                 }
+            }
+            if add_account {
+                self.start_microsoft_login(ctx);
             }
             ui.add_space(12.0);
             ui.separator();
-            if ui.selectable_label(self.settings_open, "Einstellungen").clicked() {
+            if ui.selectable_label(self.settings_open, "Settings").clicked() {
                 self.settings_open = !self.settings_open;
             }
         });
@@ -1044,9 +1053,9 @@ impl eframe::App for App {
         egui::TopBottomPanel::bottom("launch").frame(egui::Frame::none().fill(theme::STONE).inner_margin(egui::Margin::symmetric(14.0, 8.0))).show(ctx, |ui| {
             ui.add_space(4.0);
             ui.horizontal(|ui| {
-                let sel = if self.selected.is_empty() { "keine Version".to_string() } else { config::display(&self.cfg.names, &self.selected) };
+                let sel = if self.selected.is_empty() { "no version".to_string() } else { config::display(&self.cfg.names, &self.selected) };
                 let installed = self.installed.contains(&self.selected);
-                let label = if installed { format!("Spielen: {sel}") } else { format!("Installieren & spielen: {sel}") };
+                let label = if installed { format!("Play: {sel}") } else { format!("Install & play: {sel}") };
                 if ui.add_enabled(!busy, egui::Button::new(egui::RichText::new(label).size(16.0).strong().color(egui::Color32::WHITE)).fill(theme::GREEN).stroke(egui::Stroke::new(2.0_f32, theme::GREEN_DARK)).min_size(egui::vec2(240.0, 36.0))).clicked() {
                     self.start_launch(ctx);
                 }
@@ -1069,7 +1078,7 @@ impl eframe::App for App {
         });
 
         egui::TopBottomPanel::bottom("log").resizable(true).default_height(120.0).frame(egui::Frame::none().fill(theme::STONE_DARK).inner_margin(egui::Margin::symmetric(14.0, 8.0))).show(ctx, |ui| {
-            ui.label("Spiel-Log");
+            ui.label("Game log");
             egui::ScrollArea::vertical().id_salt("log").stick_to_bottom(true).auto_shrink([false, false]).show(ui, |ui| {
                 let lines = self.sh.lock().unwrap().log.clone();
                 for l in lines {
@@ -1091,24 +1100,24 @@ impl eframe::App for App {
         if let Some(id) = self.deleting.clone() {
             let name = config::display(&self.cfg.names, &id);
             let (mut close, mut action) = (false, None::<bool>);
-            egui::Window::new("Profil l\u{f6}schen")
+            egui::Window::new("Delete profile")
                 .collapsible(false)
                 .resizable(false)
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
                 .show(ctx, |ui| {
-                    ui.label(format!("Profil \"{name}\" wirklich l\u{f6}schen?"));
+                    ui.label(format!("Really delete profile \"{name}\"?"));
                     ui.add_space(6.0);
-                    ui.weak("Nur Profil entfernen: Der Spielordner mit Welten, Mods und Einstellungen bleibt erhalten.");
-                    ui.colored_label(theme::DANGER, "Alles l\u{f6}schen: Welten, Mods und Einstellungen sind danach unwiderruflich weg.");
+                    ui.weak("Remove profile only: the game folder with worlds, mods and settings is kept.");
+                    ui.colored_label(theme::DANGER, "Delete everything: worlds, mods and settings are gone permanently.");
                     ui.add_space(8.0);
                     ui.horizontal(|ui| {
-                        if ui.button("Nur Profil entfernen").clicked() {
+                        if ui.button("Remove profile only").clicked() {
                             action = Some(false);
                         }
-                        if ui.button("Alles l\u{f6}schen").clicked() {
+                        if ui.button("Delete everything").clicked() {
                             action = Some(true);
                         }
-                        if ui.button("Abbrechen").clicked() {
+                        if ui.button("Cancel").clicked() {
                             close = true;
                         }
                     });
@@ -1123,13 +1132,13 @@ impl eframe::App for App {
 
         if let Some((id, mut text)) = self.renaming.take() {
             let (mut open, mut apply, mut cancel) = (true, false, false);
-            egui::Window::new("Profil umbenennen")
+            egui::Window::new("Rename profile")
                 .collapsible(false)
                 .resizable(false)
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
                 .open(&mut open)
                 .show(ctx, |ui| {
-                    ui.weak(format!("Interne ID: {id}"));
+                    ui.weak(format!("Internal ID: {id}"));
                     let r = ui.add(egui::TextEdit::singleline(&mut text).desired_width(260.0));
                     if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                         apply = true;
@@ -1138,11 +1147,11 @@ impl eframe::App for App {
                         if ui.button("OK").clicked() {
                             apply = true;
                         }
-                        if ui.button("Zur\u{fc}cksetzen").on_hover_text("Urspr\u{fc}nglichen Namen wiederherstellen").clicked() {
+                        if ui.button("Reset").on_hover_text("Restore the original name").clicked() {
                             text.clear();
                             apply = true;
                         }
-                        if ui.button("Abbrechen").clicked() {
+                        if ui.button("Cancel").clicked() {
                             cancel = true;
                         }
                     });

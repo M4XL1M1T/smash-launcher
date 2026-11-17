@@ -28,6 +28,10 @@ If the hash does not match the one in the release notes, do not run the file. Yo
 
 On start the launcher asks GitHub for the latest release of this repository. If a newer version exists, a banner offers **Jetzt aktualisieren**: the launcher downloads the exe from the release, verifies it against `SHA256SUMS.txt` of the same release, replaces itself and restarts. Nothing is installed if the checksum does not match. The check can be turned off in the settings (tab Launcher), where you can also check manually. For this a release needs the asset `smash-launcher-vX.Y.Z-windows-x64.exe` and `SHA256SUMS.txt` (created by the release helper) and a tag `vX.Y.Z` that is higher than the installed version.
 
+## Releasing (maintainer)
+
+Releases are built by GitHub Actions (`.github/workflows/release.yml`), so the published exe comes from the source in this repository. One-time setup: add the repository secret `SMASH_CLIENT_ID` (Settings, Secrets and variables, Actions). To release: raise `version` in `Cargo.toml`, push, then run **Actions, Release, Run workflow** and enter the tag (for example `v0.2.1`). The workflow runs the tests, builds the exe and creates a **draft** release with the exe, `SHA256SUMS.txt` and release notes. Check the draft on the Releases page and click **Publish release**.
+
 ## Features
 
 - Multiple accounts, switch with one click

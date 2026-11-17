@@ -4,16 +4,16 @@ use std::{collections::BTreeMap, collections::HashSet, fs, io, path::Path};
 
 /// Sound categories of the game: (key in options.txt without prefix, label shown in the launcher).
 pub const SOUNDS: [(&str, &str); 10] = [
-    ("master", "Gesamtlautst\u{e4}rke (Master)"),
-    ("music", "Musik"),
-    ("record", "Plattenspieler / Notenbl\u{f6}cke"),
-    ("weather", "Wetter"),
-    ("block", "Bl\u{f6}cke"),
-    ("hostile", "Feindselige Kreaturen"),
-    ("neutral", "Freundliche Kreaturen"),
-    ("player", "Spieler"),
-    ("ambient", "Umgebung"),
-    ("voice", "Stimmen / Dialoge"),
+    ("master", "Master volume"),
+    ("music", "Music"),
+    ("record", "Jukebox / note blocks"),
+    ("weather", "Weather"),
+    ("block", "Blocks"),
+    ("hostile", "Hostile creatures"),
+    ("neutral", "Friendly creatures"),
+    ("player", "Players"),
+    ("ambient", "Ambient/environment"),
+    ("voice", "Voices / dialogue"),
 ];
 
 #[derive(Serialize, Deserialize, Clone, Copy)]

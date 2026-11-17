@@ -62,7 +62,7 @@ pub fn check() -> Result<Option<Info>> {
         .set("Accept", "application/vnd.github+json")
         .call()
         .map_err(|e| match e {
-            ureq::Error::Status(404, _) => anyhow!("Noch kein Release auf GitHub ver\u{f6}ffentlicht"),
+            ureq::Error::Status(404, _) => anyhow!("No release published on GitHub yet"),
             e => anyhow!("{e}"),
         })?;
     let json: Value = resp.into_json()?;
@@ -70,19 +70,19 @@ pub fn check() -> Result<Option<Info>> {
 }
 
 fn parse_release(json: &Value, local: &str) -> Result<Option<Info>> {
-    let tag = json["tag_name"].as_str().ok_or_else(|| anyhow!("Release ohne Versionsnummer"))?;
+    let tag = json["tag_name"].as_str().ok_or_else(|| anyhow!("Release without a version number"))?;
     if !is_newer(tag, local) {
         return Ok(None);
     }
-    let assets = json["assets"].as_array().ok_or_else(|| anyhow!("Release ohne Dateien"))?;
+    let assets = json["assets"].as_array().ok_or_else(|| anyhow!("Release without files"))?;
     let find = |pred: &dyn Fn(&str) -> bool| {
         assets.iter().find_map(|a| {
             let (name, url) = (a["name"].as_str()?, a["browser_download_url"].as_str()?);
             (pred(name) && trusted(url)).then(|| (name.to_string(), url.to_string()))
         })
     };
-    let (exe_name, exe_url) = find(&|n| n.ends_with(EXE_SUFFIX)).ok_or_else(|| anyhow!("Release enth\u{e4}lt keine Windows-Datei"))?;
-    let (_, sums_url) = find(&|n| n == SUMS_NAME).ok_or_else(|| anyhow!("Release enth\u{e4}lt keine {SUMS_NAME}, Update aus Sicherheitsgr\u{fc}nden abgelehnt"))?;
+    let (exe_name, exe_url) = find(&|n| n.ends_with(EXE_SUFFIX)).ok_or_else(|| anyhow!("Release contains no Windows file"))?;
+    let (_, sums_url) = find(&|n| n == SUMS_NAME).ok_or_else(|| anyhow!("Release contains no {SUMS_NAME}, update rejected for security reasons"))?;
     Ok(Some(Info {
         version: tag.trim_start_matches('v').to_string(),
         exe_name,
@@ -110,37 +110,37 @@ fn with_suffix(p: &Path, suffix: &str) -> PathBuf {
 /// Downloads, verifies and swaps the exe. After Ok the new version is in place of the running exe,
 /// the launcher should restart.
 pub fn install(info: &Info, on_step: &dyn Fn(&str, f32)) -> Result<()> {
-    on_step("Pr\u{fc}fsumme wird geladen ...", 0.05);
-    let sums = String::from_utf8(net::get_bytes(&info.sums_url)?).context("SHA256SUMS.txt ist kein Text")?;
-    let want = expected_hash(&sums, &info.exe_name).ok_or_else(|| anyhow!("Keine Pr\u{fc}fsumme f\u{fc}r {} gefunden", info.exe_name))?;
+    on_step("Loading checksum ...", 0.05);
+    let sums = String::from_utf8(net::get_bytes(&info.sums_url)?).context("SHA256SUMS.txt is not text")?;
+    let want = expected_hash(&sums, &info.exe_name).ok_or_else(|| anyhow!("No checksum found for {}", info.exe_name))?;
 
-    on_step("Update wird heruntergeladen ...", 0.15);
+    on_step("Downloading update ...", 0.15);
     let bytes = net::get_bytes(&info.exe_url)?;
     if bytes.len() > MAX_EXE_BYTES || bytes.len() < 1024 * 1024 {
-        bail!("Heruntergeladene Datei hat eine unplausible Gr\u{f6}\u{df}e ({} Bytes)", bytes.len());
+        bail!("Downloaded file has an implausible size ({} bytes)", bytes.len());
     }
-    on_step("Update wird gepr\u{fc}ft ...", 0.8);
+    on_step("Verifying update ...", 0.8);
     let got = format!("{:x}", Sha256::digest(&bytes));
     if got != want {
-        bail!("Pr\u{fc}fsumme stimmt nicht, Update wurde nicht installiert");
+        bail!("Checksum does not match, update was not installed");
     }
     if !bytes.starts_with(b"MZ") {
-        bail!("Heruntergeladene Datei ist keine Windows-Programmdatei");
+        bail!("Downloaded file is not a Windows executable");
     }
 
-    on_step("Update wird installiert ...", 0.9);
+    on_step("Installing update ...", 0.9);
     let exe = std::env::current_exe()?;
     let (new, old) = (with_suffix(&exe, ".new"), with_suffix(&exe, ".old"));
-    fs::write(&new, &bytes).context("Neue Datei konnte nicht neben das Programm geschrieben werden")?;
+    fs::write(&new, &bytes).context("New file could not be written next to the program")?;
     let _ = fs::remove_file(&old);
     if let Err(e) = fs::rename(&exe, &old) {
         let _ = fs::remove_file(&new);
-        bail!("Aktuelles Programm konnte nicht ersetzt werden: {e}");
+        bail!("Current program could not be replaced: {e}");
     }
     if let Err(e) = fs::rename(&new, &exe) {
         let _ = fs::rename(&old, &exe);
         let _ = fs::remove_file(&new);
-        bail!("Neue Version konnte nicht eingesetzt werden: {e}");
+        bail!("New version could not be put in place: {e}");
     }
     Ok(())
 }

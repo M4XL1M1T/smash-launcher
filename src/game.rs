@@ -65,7 +65,7 @@ pub fn fetch_manifest(root: &Path) -> Result<Vec<VersionEntry>> {
     };
     Ok(v["versions"]
         .as_array()
-        .context("Manifest ohne Versionen")?
+        .context("Manifest without versions")?
         .iter()
         .filter_map(|x| {
             Some(VersionEntry {
@@ -100,7 +100,7 @@ fn load_merged(root: &Path, id: &str) -> Result<Value> {
     let mut v = match child["inheritsFrom"].as_str() {
         Some(parent) => {
             let mut m = load_merged(root, parent)?;
-            for (k, val) in child.as_object().context("ung\u{fc}ltige Version")? {
+            for (k, val) in child.as_object().context("invalid version")? {
                 match k.as_str() {
                     "libraries" => {
                         let mut libs = val.as_array().cloned().unwrap_or_default();
@@ -219,7 +219,7 @@ fn ensure_json(root: &Path, id: &str, manifest: &[VersionEntry]) -> Result<()> {
         let e = manifest
             .iter()
             .find(|e| e.id == id)
-            .ok_or_else(|| anyhow!("Version {id} nicht gefunden"))?;
+            .ok_or_else(|| anyhow!("Version {id} not found"))?;
         net::download_all(vec![Task { url: e.url.clone(), path: p.clone(), sha1: None, size: None }], &|_, _| {})?;
     }
     if let Some(parent) = read_json(&p)?["inheritsFrom"].as_str() {
@@ -230,14 +230,14 @@ fn ensure_json(root: &Path, id: &str, manifest: &[VersionEntry]) -> Result<()> {
 
 /// Downloads client jar, libraries and assets for a version. Returns the merged version json.
 pub fn ensure_installed(root: &Path, id: &str, manifest: &[VersionEntry], status: Status) -> Result<Value> {
-    status("Versionsdaten laden", 0.0);
+    status("Loading version data", 0.0);
     ensure_json(root, id, manifest)?;
     let v = load_merged(root, id)?;
     let jar_id = v["_jar"].as_str().unwrap_or(id).to_string();
 
     let client = &v["downloads"]["client"];
     let mut tasks = vec![Task {
-        url: client["url"].as_str().context("Client-Download fehlt in der Versionsdatei")?.into(),
+        url: client["url"].as_str().context("Client download missing in the version file")?.into(),
         path: jar_path(root, &jar_id),
         sha1: client["sha1"].as_str().map(Into::into),
         size: client["size"].as_u64(),
@@ -245,16 +245,16 @@ pub fn ensure_installed(root: &Path, id: &str, manifest: &[VersionEntry], status
     tasks.extend(collect_libs(root, &v).into_iter().map(|l| l.task));
 
     let idx = &v["assetIndex"];
-    let idx_id = idx["id"].as_str().context("assetIndex fehlt")?;
+    let idx_id = idx["id"].as_str().context("assetIndex missing")?;
     let idx_path = root.join("assets").join("indexes").join(format!("{idx_id}.json"));
     tasks.push(Task {
-        url: idx["url"].as_str().context("assetIndex-URL fehlt")?.into(),
+        url: idx["url"].as_str().context("assetIndex URL missing")?.into(),
         path: idx_path.clone(),
         sha1: idx["sha1"].as_str().map(Into::into),
         size: idx["size"].as_u64(),
     });
-    status("Bibliotheken laden", 0.02);
-    net::download_all(tasks, &|d, t| status(&format!("Bibliotheken {d}/{t}"), 0.02 + 0.28 * d as f32 / t as f32))?;
+    status("Loading libraries", 0.02);
+    net::download_all(tasks, &|d, t| status(&format!("Libraries {d}/{t}"), 0.02 + 0.28 * d as f32 / t as f32))?;
 
     let index = read_json(&idx_path)?;
     let objs: Vec<Task> = index["objects"]
@@ -271,7 +271,7 @@ pub fn ensure_installed(root: &Path, id: &str, manifest: &[VersionEntry], status
             })
         })
         .collect();
-    status("Assets laden", 0.3);
+    status("Loading assets", 0.3);
     net::download_all(objs, &|d, t| status(&format!("Assets {d}/{t}"), 0.3 + 0.7 * d as f32 / t as f32))?;
     Ok(v)
 }
@@ -300,11 +300,11 @@ pub fn ensure_java(root: &Path, v: &Value, custom: &str, status: Status) -> Resu
     if marker.exists() && exe.exists() {
         return Ok(exe);
     }
-    status(&format!("Java ({component}) laden"), 0.0);
+    status(&format!("Loading Java ({component})"), 0.0);
     let all = net::get_json(RUNTIME_URL)?;
     let manifest_url = all[runtime_platform()][component][0]["manifest"]["url"]
         .as_str()
-        .ok_or_else(|| anyhow!("Kein Java {component} f\u{fc}r {} verf\u{fc}gbar, bitte Java-Pfad in den Einstellungen setzen", runtime_platform()))?;
+        .ok_or_else(|| anyhow!("No Java {component} available for {}, please set a Java path in the settings", runtime_platform()))?;
     let manifest = net::get_json(manifest_url)?;
     let mut tasks = vec![];
     let mut exec = vec![];
@@ -318,7 +318,7 @@ pub fn ensure_java(root: &Path, v: &Value, custom: &str, status: Status) -> Resu
             exec.push(path.clone());
         }
         tasks.push(Task {
-            url: raw["url"].as_str().context("Runtime-Datei ohne URL")?.into(),
+            url: raw["url"].as_str().context("Runtime file without URL")?.into(),
             path,
             sha1: raw["sha1"].as_str().map(Into::into),
             size: raw["size"].as_u64(),
@@ -334,7 +334,7 @@ pub fn ensure_java(root: &Path, v: &Value, custom: &str, status: Status) -> Resu
     let _ = exec;
     fs::write(&marker, "ok")?;
     if !exe.exists() {
-        bail!("Java-Runtime unvollst\u{e4}ndig: {} fehlt", exe.display());
+        bail!("Java runtime incomplete: {} is missing", exe.display());
     }
     Ok(exe)
 }
@@ -455,7 +455,7 @@ pub fn run_game(
     let mut args: Vec<String> = vec![format!("-Xmx{ram_mb}M"), "-Xms256M".into()];
     if v["arguments"].is_object() {
         expand_args(&v["arguments"]["jvm"], &vars, &mut args);
-        args.push(v["mainClass"].as_str().context("mainClass fehlt")?.into());
+        args.push(v["mainClass"].as_str().context("mainClass missing")?.into());
         expand_args(&v["arguments"]["game"], &vars, &mut args);
     } else {
         for a in [
@@ -467,7 +467,7 @@ pub fn run_game(
         ] {
             args.push(subst(a, &vars));
         }
-        args.push(v["mainClass"].as_str().context("mainClass fehlt")?.into());
+        args.push(v["mainClass"].as_str().context("mainClass missing")?.into());
         for a in v["minecraftArguments"].as_str().unwrap_or_default().split_whitespace() {
             args.push(subst(a, &vars));
         }
@@ -480,7 +480,7 @@ pub fn run_game(
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     }
-    let mut child = cmd.spawn().with_context(|| format!("Java konnte nicht gestartet werden: {}", java.display()))?;
+    let mut child = cmd.spawn().with_context(|| format!("Java could not be started: {}", java.display()))?;
     let out = child.stdout.take().unwrap();
     let err = child.stderr.take().unwrap();
     let code = std::thread::scope(|s| {

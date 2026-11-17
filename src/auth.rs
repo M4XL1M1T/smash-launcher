@@ -27,7 +27,7 @@ pub struct DeviceCode {
 pub fn device_code(client_id: &str) -> Result<DeviceCode> {
     let (st, v) = net::post_form(&format!("{LOGIN}/devicecode"), &[("client_id", client_id), ("scope", SCOPE)])?;
     if st != 200 {
-        bail!("Device-Code-Anfrage fehlgeschlagen: {}", v["error_description"].as_str().unwrap_or("unbekannt"));
+        bail!("Device code request failed: {}", v["error_description"].as_str().unwrap_or("unknown"));
     }
     Ok(DeviceCode {
         device_code: v["device_code"].as_str().unwrap_or_default().into(),
@@ -45,10 +45,10 @@ pub fn poll_token(client_id: &str, dc: &DeviceCode, cancel: &AtomicBool) -> Resu
     loop {
         std::thread::sleep(Duration::from_secs(interval));
         if cancel.load(Ordering::SeqCst) {
-            bail!("Anmeldung abgebrochen");
+            bail!("Sign-in cancelled");
         }
         if start.elapsed().as_secs() > dc.expires_in {
-            bail!("Der Code ist abgelaufen");
+            bail!("The code has expired");
         }
         let (st, v) = net::post_form(
             &format!("{LOGIN}/token"),
@@ -67,7 +67,7 @@ pub fn poll_token(client_id: &str, dc: &DeviceCode, cancel: &AtomicBool) -> Resu
         match v["error"].as_str() {
             Some("authorization_pending") => {}
             Some("slow_down") => interval += 5,
-            _ => bail!("Anmeldung fehlgeschlagen: {}", v["error_description"].as_str().unwrap_or("unbekannt")),
+            _ => bail!("Sign-in failed: {}", v["error_description"].as_str().unwrap_or("unknown")),
         }
     }
 }
@@ -83,7 +83,7 @@ pub fn refresh(client_id: &str, refresh_token: &str) -> Result<(String, String)>
         ],
     )?;
     if st != 200 {
-        bail!("Token-Erneuerung fehlgeschlagen, bitte Account neu anmelden ({})", v["error"].as_str().unwrap_or("?"));
+        bail!("Token refresh failed, please sign in to the account again ({})", v["error"].as_str().unwrap_or("?"));
     }
     Ok((
         v["access_token"].as_str().unwrap_or_default().into(),
@@ -102,7 +102,7 @@ pub fn minecraft_login(ms_access: &str) -> Result<(String, String, String)> {
         }),
     )?;
     if st != 200 {
-        bail!("Xbox-Live-Anmeldung fehlgeschlagen (HTTP {st})");
+        bail!("Xbox Live sign-in failed (HTTP {st})");
     }
     let xbl_token = xbl["Token"].as_str().unwrap_or_default().to_string();
 
@@ -116,9 +116,9 @@ pub fn minecraft_login(ms_access: &str) -> Result<(String, String, String)> {
     )?;
     if st != 200 {
         match xsts["XErr"].as_u64() {
-            Some(2148916233) => bail!("Dieses Microsoft-Konto hat kein Xbox-Profil"),
-            Some(2148916238) => bail!("Kinderkonto: muss einer Microsoft-Familie hinzugef\u{fc}gt werden"),
-            _ => bail!("XSTS-Anmeldung fehlgeschlagen (HTTP {st})"),
+            Some(2148916233) => bail!("This Microsoft account has no Xbox profile"),
+            Some(2148916238) => bail!("Child account: it must be added to a Microsoft family"),
+            _ => bail!("XSTS sign-in failed (HTTP {st})"),
         }
     }
     let uhs = xsts["DisplayClaims"]["xui"][0]["uhs"].as_str().unwrap_or_default();
@@ -129,16 +129,16 @@ pub fn minecraft_login(ms_access: &str) -> Result<(String, String, String)> {
         json!({"identityToken": format!("XBL3.0 x={uhs};{xsts_token}")}),
     )?;
     if st != 200 {
-        bail!("Minecraft-Anmeldung fehlgeschlagen (HTTP {st})");
+        bail!("Minecraft sign-in failed (HTTP {st})");
     }
     let token = mc["access_token"].as_str().unwrap_or_default().to_string();
 
     let (st, prof): (u16, Value) = net::get_auth("https://api.minecraftservices.com/minecraft/profile", &token)?;
     if st == 404 {
-        bail!("Auf diesem Konto ist Minecraft Java Edition nicht gekauft");
+        bail!("Minecraft: Java Edition is not owned on this account");
     }
     if st != 200 {
-        bail!("Profilabfrage fehlgeschlagen (HTTP {st})");
+        bail!("Profile request failed (HTTP {st})");
     }
     Ok((
         token,

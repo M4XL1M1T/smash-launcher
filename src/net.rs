@@ -80,13 +80,13 @@ fn fetch_one(t: &Task) -> Result<()> {
     if already_ok(t) {
         return Ok(());
     }
-    let mut last = anyhow!("unbekannter Fehler");
+    let mut last = anyhow!("unknown error");
     for _ in 0..3 {
         match get_bytes(&t.url) {
             Ok(b) => {
                 if let Some(h) = &t.sha1 {
                     if &format!("{:x}", Sha1::digest(&b)) != h {
-                        last = anyhow!("Pr\u{fc}fsumme falsch");
+                        last = anyhow!("Checksum mismatch");
                         continue;
                     }
                 }
@@ -132,7 +132,7 @@ pub fn download_all(tasks: Vec<Task>, on_progress: &(dyn Fn(usize, usize) + Sync
     });
     let errs = errors.into_inner().unwrap();
     if !errs.is_empty() {
-        bail!("{} Downloads fehlgeschlagen, z. B. {}", errs.len(), errs[0]);
+        bail!("{} downloads failed, e.g. {}", errs.len(), errs[0]);
     }
     Ok(())
 }
