@@ -68,6 +68,7 @@ struct App {
     renaming: Option<(String, String)>,
     update_dismissed: bool,
     update_prompted: bool,
+    exporting: Option<(String, bool)>,
     restart_pending: bool,
 }
 
@@ -258,6 +259,9 @@ impl App {
                 let cur = config::display(&self.cfg.names, &self.selected);
                 self.renaming = Some((self.selected.clone(), cur));
             }
+            if ui.add_enabled(can_rename, egui::Button::new("Export")).on_hover_text("Export the selected profile as a .mrpack file to share it").clicked() {
+                self.exporting = Some((self.selected.clone(), false));
+            }
             if ui.add_enabled(can_rename, egui::Button::new("Delete")).on_hover_text("Delete the selected profile").clicked() {
                 self.deleting = Some(self.selected.clone());
             }
@@ -287,7 +291,8 @@ impl App {
         let mut create = false;
         let mut rename_req: Option<String> = None;
         let mut delete_req: Option<String> = None;
-        egui::ScrollArea::vertical().id_salt("home").auto_shrink([false, false]).show(ui, |ui| {
+        let mut export_req: Option<String> = None;
+        egui::ScrollArea::vertical().id_salt("home").drag_to_scroll(false).auto_shrink([false, false]).show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing = egui::vec2(10.0, 10.0);
                 for (id, name, sub) in &cards {
@@ -318,6 +323,10 @@ impl App {
                     resp.context_menu(|ui| {
                         if ui.button("Rename ...").clicked() {
                             rename_req = Some(id.clone());
+                            ui.close_menu();
+                        }
+                        if ui.button("Export ...").clicked() {
+                            export_req = Some(id.clone());
                             ui.close_menu();
                         }
                         if ui.button("Delete ...").clicked() {
@@ -355,6 +364,9 @@ impl App {
         if let Some(id) = delete_req {
             self.deleting = Some(id);
         }
+        if let Some(id) = export_req {
+            self.exporting = Some((id, false));
+        }
         if create {
             self.creating = true;
         }
@@ -383,16 +395,11 @@ impl App {
             ui.checkbox(&mut self.show_old, "Beta/Alpha");
             ui.add(egui::TextEdit::singleline(&mut self.search).hint_text("Search").desired_width(120.0));
         });
-        ui.horizontal(|ui| {
-            let sel_ok = !self.selected.is_empty() && !self.installed.contains(&self.selected);
-            let label = if self.selected.is_empty() { "Select a version".to_string() } else { format!("Add {} without starting", self.selected) };
-            if ui.add_enabled(!busy && sel_ok, egui::Button::new(label)).clicked() {
-                self.start_install_only(ctx);
-            }
-            if !self.selected.is_empty() && self.installed.contains(&self.selected) {
-                ui.weak("This version already exists as a profile.");
-            }
-        });
+        if !self.selected.is_empty() && self.installed.contains(&self.selected) {
+            ui.weak("This version already exists as a profile.");
+        } else {
+            ui.weak("Select a version, then press Install at the bottom.");
+        }
         ui.separator();
         let q = self.search.to_lowercase();
         let list: Vec<&Row> = self
@@ -408,7 +415,7 @@ impl App {
             .collect();
         let h = ui.text_style_height(&egui::TextStyle::Body) + 6.0;
         let mut pick: Option<String> = None;
-        egui::ScrollArea::vertical().id_salt("versions").auto_shrink([false, false]).show_rows(ui, h, list.len(), |ui, range| {
+        egui::ScrollArea::vertical().id_salt("versions").drag_to_scroll(false).auto_shrink([false, false]).show_rows(ui, h, list.len(), |ui, range| {
             for r in &list[range] {
                 let inst = if self.installed.contains(&r.id) { "  [installed]" } else { "" };
                 let kind = match r.kind.as_str() {
@@ -648,6 +655,7 @@ impl App {
             renaming: None,
             update_dismissed: false,
             update_prompted: false,
+            exporting: None,
             restart_pending: false,
         };
         if app.cfg.check_updates {
@@ -807,6 +815,47 @@ impl App {
         });
     }
 
+    fn start_export(&mut self, ctx: &egui::Context, id: String, include_worlds: bool) {
+        {
+            let mut s = self.sh.lock().unwrap();
+            if s.busy {
+                return;
+            }
+            s.busy = true;
+            s.progress = 0.0;
+            s.error = None;
+        }
+        let name = config::display(&self.cfg.names, &id);
+        let (sh, ctx, root) = (self.sh.clone(), ctx.clone(), self.root.clone());
+        std::thread::spawn(move || {
+            let status = |t: &str, f: f32| {
+                let mut s = sh.lock().unwrap();
+                s.status = t.to_string();
+                s.progress = f;
+                ctx.request_repaint();
+            };
+            let r = (|| -> Result<Option<PathBuf>> {
+                let Some(dest) = rfd::FileDialog::new().add_filter("Modrinth modpack", &["mrpack"]).set_file_name(format!("{name}.mrpack")).save_file() else {
+                    return Ok(None);
+                };
+                mrpack::export(&root, &id, &name, include_worlds, &dest, &status)?;
+                Ok(Some(dest))
+            })();
+            let mut s = sh.lock().unwrap();
+            s.busy = false;
+            s.progress = 0.0;
+            match r {
+                Ok(Some(dest)) => s.status = format!("Exported to {}", dest.display()),
+                Ok(None) => s.status.clear(),
+                Err(e) => {
+                    s.status.clear();
+                    s.error = Some(format!("Export failed: {e}"));
+                }
+            }
+            ctx.request_repaint();
+        });
+    }
+
     fn start_import(&mut self, ctx: &egui::Context, file: Option<PathBuf>) {
         {
             let mut s = self.sh.lock().unwrap();
@@ -930,6 +979,15 @@ impl App {
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
         self.sync();
+        let (inner, outer, maximized, minimized) = ctx.input(|i| (i.viewport().inner_rect, i.viewport().outer_rect, i.viewport().maximized, i.viewport().minimized));
+        if maximized != Some(true) && minimized != Some(true) {
+            if let Some(r) = inner.filter(|r| r.width() >= 700.0 && r.height() >= 450.0) {
+                self.cfg.window_size = [r.width().round(), r.height().round()];
+            }
+            if let Some(r) = outer.filter(|r| r.min.x > -20000.0 && r.min.y > -20000.0) {
+                self.cfg.window_pos = Some([r.min.x.round(), r.min.y.round()]);
+            }
+        }
         let dropped = ctx.input(|i| {
             i.raw.dropped_files.iter().filter_map(|f| f.path.clone()).find(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("mrpack")))
         });
@@ -996,11 +1054,21 @@ impl eframe::App for App {
             }
         }
 
-        egui::SidePanel::left("accounts").min_width(250.0).frame(egui::Frame::none().inner_margin(14.0)).show(ctx, |ui| {
+        egui::SidePanel::left("accounts").resizable(false).exact_width(260.0).frame(egui::Frame::none().inner_margin(14.0)).show(ctx, |ui| {
             theme::paint_dirt(ctx, ui.painter(), ui.max_rect().expand(14.0));
-            ui.label(egui::RichText::new("SMASH").monospace().size(30.0).strong().color(theme::GREEN_LIGHT));
-            ui.label(egui::RichText::new("LAUNCHER").monospace().size(14.0).color(theme::TEXT));
+            // Header: filled edge to edge behind the title, closed off by a separator line.
+            let panel = ui.max_rect().expand(14.0);
+            let bg = ui.painter().add(egui::Shape::Noop);
+            ui.vertical_centered(|ui| {
+                ui.label(egui::RichText::new("SMASH").monospace().size(30.0).strong().color(theme::GREEN_LIGHT));
+                ui.label(egui::RichText::new("LAUNCHER").monospace().size(14.0).color(theme::TEXT));
+            });
             ui.add_space(8.0);
+            let bottom = ui.cursor().min.y;
+            let header = egui::Rect::from_min_max(panel.min, egui::pos2(panel.max.x, bottom));
+            ui.painter().set(bg, egui::Shape::rect_filled(header, 0.0, egui::Color32::from_black_alpha(110)));
+            ui.painter().line_segment([header.left_bottom(), header.right_bottom()], egui::Stroke::new(2.0_f32, theme::OUTLINE));
+            ui.add_space(14.0);
             let mut add_account = false;
             ui.horizontal(|ui| {
                 let head = ui.heading("Accounts");
@@ -1034,7 +1102,7 @@ impl eframe::App for App {
                     ui.horizontal(|ui| {
                         ui.add_space(20.0);
                         let active = a.key() == self.cfg.selected && self.selected == *v;
-                        let text = egui::RichText::new(config::display(&self.cfg.names, v)).small();
+                        let text = egui::RichText::new(config::display(&self.cfg.names, v)).size(11.0).color(egui::Color32::WHITE);
                         let (fill, stroke) = if active {
                             (theme::GREEN_DARK, egui::Stroke::new(1.0_f32, theme::GREEN_LIGHT))
                         } else {
@@ -1099,23 +1167,36 @@ impl eframe::App for App {
             if add_account {
                 self.start_microsoft_login(ctx);
             }
-            ui.add_space(12.0);
-            ui.separator();
-            if ui.selectable_label(self.settings_open, "Settings").clicked() {
-                self.settings_open = !self.settings_open;
-            }
+            ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
+                let (fill, stroke) = if self.settings_open {
+                    (theme::GREEN_DARK, egui::Stroke::new(1.0_f32, theme::GREEN_LIGHT))
+                } else {
+                    (egui::Color32::from_white_alpha(10), egui::Stroke::new(1.0_f32, egui::Color32::from_white_alpha(28)))
+                };
+                if ui.add_sized([ui.available_width(), 30.0], egui::Button::new("Settings").fill(fill).stroke(stroke)).clicked() {
+                    self.settings_open = !self.settings_open;
+                }
+                ui.separator();
+            });
         });
 
         egui::TopBottomPanel::bottom("launch").frame(egui::Frame::none().fill(theme::STONE).inner_margin(egui::Margin::symmetric(14.0, 8.0))).show(ctx, |ui| {
             ui.add_space(4.0);
             ui.horizontal(|ui| {
-                let sel = if self.selected.is_empty() { "no version".to_string() } else { config::display(&self.cfg.names, &self.selected) };
                 let installed = self.installed.contains(&self.selected);
-                let label = if installed { format!("Play: {sel}") } else { format!("Install & play: {sel}") };
-                if ui.add_enabled(!busy, egui::Button::new(egui::RichText::new(label).size(16.0).strong().color(egui::Color32::WHITE)).fill(theme::GREEN).stroke(egui::Stroke::new(2.0_f32, theme::GREEN_DARK)).min_size(egui::vec2(240.0, 36.0))).clicked() {
-                    self.start_launch(ctx);
+                let label = if self.selected.is_empty() {
+                    "Select a profile".to_string()
+                } else {
+                    let sel = config::display(&self.cfg.names, &self.selected);
+                    if installed { format!("Play: {sel}") } else { format!("Install: {sel}") }
+                };
+                if ui.add_enabled(!busy && !self.selected.is_empty(), egui::Button::new(egui::RichText::new(label).size(16.0).strong().color(egui::Color32::WHITE)).fill(theme::GREEN).stroke(egui::Stroke::new(2.0_f32, theme::GREEN_DARK)).min_size(egui::vec2(240.0, 36.0))).clicked() {
+                    if installed {
+                        self.start_launch(ctx);
+                    } else {
+                        self.start_install_only(ctx);
+                    }
                 }
-                ui.add(egui::Slider::new(&mut self.cfg.ram_mb, 1024..=16384).step_by(256.0).text("RAM (MB)"));
             });
             if busy || progress > 0.0 {
                 ui.add(egui::ProgressBar::new(progress).text(status.clone()));
@@ -1133,15 +1214,17 @@ impl eframe::App for App {
             ui.add_space(4.0);
         });
 
-        egui::TopBottomPanel::bottom("log").resizable(true).default_height(120.0).frame(egui::Frame::none().fill(theme::STONE_DARK).inner_margin(egui::Margin::symmetric(14.0, 8.0))).show(ctx, |ui| {
-            ui.label("Game log");
-            egui::ScrollArea::vertical().id_salt("log").stick_to_bottom(true).auto_shrink([false, false]).show(ui, |ui| {
-                let lines = self.sh.lock().unwrap().log.clone();
-                for l in lines {
-                    ui.label(egui::RichText::new(l).monospace().size(11.0));
-                }
+        if !self.settings_open {
+            egui::TopBottomPanel::bottom("log").resizable(false).exact_height(120.0).frame(egui::Frame::none().fill(theme::STONE_DARK).inner_margin(egui::Margin::symmetric(14.0, 8.0))).show(ctx, |ui| {
+                ui.label("Game log");
+                egui::ScrollArea::vertical().id_salt("log").stick_to_bottom(true).auto_shrink([false, false]).show(ui, |ui| {
+                    let lines = self.sh.lock().unwrap().log.clone();
+                    for l in lines {
+                        ui.label(egui::RichText::new(l).monospace().size(11.0));
+                    }
+                });
             });
-        });
+        }
 
         egui::CentralPanel::default().frame(egui::Frame::none().fill(theme::STONE_DARK).inner_margin(18.0)).show(ctx, |ui| {
             if self.settings_open {
@@ -1183,6 +1266,37 @@ impl eframe::App for App {
                 self.delete_profile(id, with_data);
             } else if close {
                 self.deleting = None;
+            }
+        }
+
+        if let Some((id, mut worlds)) = self.exporting.take() {
+            let name = config::display(&self.cfg.names, &id);
+            let (mut open, mut go, mut cancel) = (true, false, false);
+            egui::Window::new("Export profile")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .open(&mut open)
+                .show(ctx, |ui| {
+                    ui.label(format!("Export \"{name}\" as a .mrpack file."));
+                    ui.weak("It contains the Minecraft version, the Fabric or Quilt loader, mods, configs, resource packs and options. Friends import it with the + card (or any launcher that supports .mrpack).");
+                    ui.add_space(6.0);
+                    ui.checkbox(&mut worlds, "Include worlds (can be large)");
+                    ui.colored_label(theme::DANGER, "Config files of some mods can contain private data such as API keys. Only share the file with people you trust.");
+                    ui.add_space(8.0);
+                    ui.horizontal(|ui| {
+                        if ui.add_enabled(!busy, egui::Button::new("Export ...").fill(theme::GREEN)).clicked() {
+                            go = true;
+                        }
+                        if ui.button("Cancel").clicked() {
+                            cancel = true;
+                        }
+                    });
+                });
+            if go {
+                self.start_export(ctx, id, worlds);
+            } else if open && !cancel {
+                self.exporting = Some((id, worlds));
             }
         }
 
@@ -1237,8 +1351,15 @@ impl eframe::App for App {
 
 fn main() -> eframe::Result {
     update::cleanup();
+    let saved = root_dir().map(|r| Config::load(&r));
+    let size = saved.as_ref().map(|c| c.window_size).filter(|s| s[0] >= 760.0 && s[1] >= 520.0 && s[0] <= 8000.0 && s[1] <= 8000.0).unwrap_or([940.0, 640.0]);
+    let pos = saved.as_ref().and_then(|c| c.window_pos).filter(|p| p[0] > -4000.0 && p[0] < 8000.0 && p[1] > -100.0 && p[1] < 5000.0);
+    let mut viewport = egui::ViewportBuilder::default().with_inner_size(size);
+    if let Some(p) = pos {
+        viewport = viewport.with_position(egui::pos2(p[0], p[1]));
+    }
     let opts = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([940.0, 640.0]).with_min_inner_size([760.0, 520.0]).with_title("Smash Launcher").with_icon(theme::app_icon()),
+        viewport: viewport.with_min_inner_size([760.0, 520.0]).with_title("Smash Launcher").with_icon(theme::app_icon()),
         ..Default::default()
     };
     eframe::run_native("Smash Launcher", opts, Box::new(|cc| {

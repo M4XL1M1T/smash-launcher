@@ -162,8 +162,52 @@ pub fn apply(ctx: &egui::Context) {
         s.spacing.item_spacing = vec2(8.0, 8.0);
         s.spacing.interact_size.y = 28.0;
         s.spacing.slider_width = 180.0;
+        // Labels are plain text, not selectable with the mouse.
+        s.interaction.selectable_labels = false;
         if let Some(h) = s.text_styles.get_mut(&egui::TextStyle::Heading) {
             h.size = 24.0;
         }
     });
+}
+
+#[cfg(test)]
+mod icon_tests {
+    use super::*;
+
+    /// Writes assets/icon.ico (grass block, several sizes) that build.rs embeds into the exe.
+    /// Run manually: cargo test write_icon_file -- --ignored
+    #[test]
+    #[ignore]
+    fn write_icon_file() {
+        let sizes = [16u32, 32, 48, 64];
+        let mut images: Vec<Vec<u8>> = vec![];
+        for &n in &sizes {
+            let mut d = Vec::new();
+            for v in [40u32, n, n * 2, 1 | (32 << 16), 0, 0, 0, 0, 0, 0] {
+                d.extend_from_slice(&v.to_le_bytes());
+            }
+            for y in (0..n).rev() {
+                for x in 0..n {
+                    let c = block_pixel(Block::Grass, x, y, n);
+                    d.extend_from_slice(&[c.b(), c.g(), c.r(), 255]);
+                }
+            }
+            d.extend(std::iter::repeat(0u8).take((((n + 31) / 32) * 4 * n) as usize));
+            images.push(d);
+        }
+        let mut out = vec![0u8, 0, 1, 0];
+        out.extend_from_slice(&(sizes.len() as u16).to_le_bytes());
+        let mut offset = 6 + 16 * sizes.len() as u32;
+        for (n, img) in sizes.iter().zip(&images) {
+            out.extend_from_slice(&[*n as u8, *n as u8, 0, 0, 1, 0, 32, 0]);
+            out.extend_from_slice(&(img.len() as u32).to_le_bytes());
+            out.extend_from_slice(&offset.to_le_bytes());
+            offset += img.len() as u32;
+        }
+        for img in &images {
+            out.extend_from_slice(img);
+        }
+        std::fs::create_dir_all("assets").unwrap();
+        std::fs::write("assets/icon.ico", out).unwrap();
+    }
 }

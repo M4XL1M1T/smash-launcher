@@ -9,6 +9,7 @@ use std::{
 };
 
 fn main() {
+    embed_windows_resources();
     println!("cargo:rerun-if-env-changed=SMASH_CLIENT_ID");
     println!("cargo:rerun-if-changed=build.rs");
 
@@ -29,4 +30,20 @@ fn main() {
     let out = format!("pub const KEY: &[u8] = &{key:?};\npub const DATA: &[u8] = &{data:?};\n");
     let dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR"));
     fs::write(dir.join("client_id.rs"), out).expect("write client_id.rs");
+}
+
+/// Embeds the icon and version info into the Windows exe (file icon in Explorer, name in Task Manager).
+fn embed_windows_resources() {
+    println!("cargo:rerun-if-changed=assets/icon.ico");
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
+        return;
+    }
+    let mut res = winresource::WindowsResource::new();
+    res.set_icon("assets/icon.ico");
+    res.set("ProductName", "Smash Launcher");
+    res.set("FileDescription", "Smash Launcher");
+    res.set("InternalName", "Smash Launcher");
+    if let Err(e) = res.compile() {
+        println!("cargo:warning=could not embed the exe icon: {e}");
+    }
 }

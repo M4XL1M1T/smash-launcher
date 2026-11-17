@@ -39,6 +39,10 @@ pub struct Config {
     pub game: crate::options::GameOptions,
     /// Look for a new launcher release on GitHub at startup.
     pub check_updates: bool,
+    /// Window size (inner, in points), restored on the next start.
+    pub window_size: [f32; 2],
+    /// Window position (outer top left corner), restored on the next start.
+    pub window_pos: Option<[f32; 2]>,
 }
 
 impl Default for Config {
@@ -53,6 +57,8 @@ impl Default for Config {
             names: HashMap::new(),
             game: Default::default(),
             check_updates: true,
+            window_size: [940.0, 640.0],
+            window_pos: None,
         }
     }
 }
