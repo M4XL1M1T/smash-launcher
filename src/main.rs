@@ -67,6 +67,7 @@ struct App {
     bulk_pct: u32,
     renaming: Option<(String, String)>,
     update_dismissed: bool,
+    update_prompted: bool,
     restart_pending: bool,
 }
 
@@ -646,6 +647,7 @@ impl App {
             bulk_pct: 30,
             renaming: None,
             update_dismissed: false,
+            update_prompted: false,
             restart_pending: false,
         };
         if app.cfg.check_updates {
@@ -956,6 +958,40 @@ impl eframe::App for App {
                     }
                 });
             });
+        }
+
+        let prompt_info = self.sh.lock().unwrap().update.clone().filter(|_| !self.update_prompted && !self.restart_pending);
+        if let Some(info) = prompt_info {
+            let mut start = false;
+            let mut later = false;
+            egui::Window::new("Update available")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .show(ctx, |ui| {
+                    ui.label(egui::RichText::new(format!("Smash Launcher {} is available.", info.version)).strong());
+                    ui.label(format!("You are using version {}.", update::CURRENT));
+                    ui.add_space(4.0);
+                    ui.weak("The update is downloaded from GitHub, checked against its SHA-256 checksum and installed. The launcher restarts afterwards.");
+                    if !info.page.is_empty() {
+                        ui.hyperlink_to("What's new?", &info.page);
+                    }
+                    ui.add_space(8.0);
+                    ui.horizontal(|ui| {
+                        if ui.add_enabled(!busy, egui::Button::new("Update now").fill(theme::GREEN)).clicked() {
+                            start = true;
+                        }
+                        if ui.button("Later").clicked() {
+                            later = true;
+                        }
+                    });
+                });
+            if start {
+                self.update_prompted = true;
+                self.start_update_install(ctx, info);
+            } else if later {
+                self.update_prompted = true;
+            }
         }
 
         egui::SidePanel::left("accounts").min_width(250.0).frame(egui::Frame::none().inner_margin(14.0)).show(ctx, |ui| {
