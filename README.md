@@ -11,8 +11,22 @@ This is a personal, non-commercial hobby project. It is not affiliated with, end
 - **Online mode only.** There are no offline accounts and no option to skip the login.
 - Sign-in uses the Microsoft device code flow (scope `XboxLive.signin offline_access`), then Xbox Live, XSTS and the Minecraft services login and profile endpoints.
 - On **every launch** the launcher refreshes the sign-in and requests the Minecraft profile. If the account does not own Minecraft: Java Edition, the game is not started.
-- Each user runs the launcher locally with their own account. There is no server component, no telemetry and no monetization.
-- Tokens are stored locally in `data/config.json` next to the executable and are only sent to Microsoft, Xbox and Mojang endpoints. The file is currently not encrypted, so do not share it.
+- Each user runs the launcher locally with their own account. There is no server component, no telemetry and no monetization. The only other network request is the optional update check against the GitHub Releases API of this repository (see below).
+- Tokens are stored locally in `config.json` inside the chosen data folder and are only sent to Microsoft, Xbox and Mojang endpoints. The file is currently not encrypted, so do not share it.
+
+## Download and verification
+
+Get the executable only from the [Releases](../../releases) page of this repository. It is not code signed yet, so Windows SmartScreen may show an "unknown publisher" warning the first time: click **More info**, then **Run anyway**. Every release lists the SHA-256 checksum of the file, you can verify your download in PowerShell:
+
+```
+Get-FileHash .\smash-launcher-vX.Y.Z-windows-x64.exe -Algorithm SHA256
+```
+
+If the hash does not match the one in the release notes, do not run the file. You can also build the launcher yourself, see below.
+
+## Updates
+
+On start the launcher asks GitHub for the latest release of this repository. If a newer version exists, a banner offers **Jetzt aktualisieren**: the launcher downloads the exe from the release, verifies it against `SHA256SUMS.txt` of the same release, replaces itself and restarts. Nothing is installed if the checksum does not match. The check can be turned off in the settings (tab Launcher), where you can also check manually. For this a release needs the asset `smash-launcher-vX.Y.Z-windows-x64.exe` and `SHA256SUMS.txt` (created by the release helper) and a tag `vX.Y.Z` that is higher than the installed version.
 
 ## Features
 
@@ -22,11 +36,12 @@ This is a personal, non-commercial hobby project. It is not affiliated with, end
 - Automatic download of the matching Java runtime from Mojang's runtime manifest (Java 8, 17, 21, ...), or a custom Java path in the settings
 - One game directory per version in `data/instances/<version>`
 - Local profiles that use `inheritsFrom` (for example Fabric) are picked up
+- Import of Modrinth modpacks (`.mrpack`, Fabric, Quilt and vanilla packs): click the import button or drag the file into the window. The loader, all mods and the config overrides are installed into their own profile. Forge and NeoForge packs are not supported yet.
 - Small binary of about 4 MB, built with egui, no web runtime
 
 ## Usage
 
-1. Download or build `smash-launcher.exe` and run it. All data is stored in a `data` folder next to it (set the `MCL_HOME` environment variable to use another folder).
+1. Download or build `smash-launcher.exe` and run it. On the first start you choose a folder where everything is stored (versions, mods, saves, Java and account data). The choice is remembered in `smash-launcher.json` next to the executable (fallback: `%APPDATA%\SmashLauncher\location.json`). The `MCL_HOME` environment variable overrides it.
 2. Click **Mit Microsoft anmelden**, open the shown link and enter the code.
 3. Pick a version and click the play button. Missing files are downloaded first.
 
@@ -46,4 +61,5 @@ The Azure application (client) ID used for the sign-in is not stored in the repo
 - `src/game.rs`: version manifest, installation, Java runtime, command line and process handling
 - `src/net.rs`: HTTP helpers and the parallel downloader
 - `src/config.rs`: settings and accounts
+- `src/mrpack.rs`: Modrinth modpack import
 - `src/main.rs`: user interface
