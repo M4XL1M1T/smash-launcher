@@ -130,7 +130,7 @@ pub fn apply(ctx: &egui::Context) {
     v.panel_fill = STONE;
     v.window_fill = Color32::from_rgb(0x2f, 0x2f, 0x32);
     v.window_stroke = Stroke::new(2.0_f32, OUTLINE);
-    v.window_rounding = Rounding::ZERO;
+    v.window_rounding = Rounding::same(3.0);
     v.menu_rounding = Rounding::ZERO;
     v.extreme_bg_color = Color32::from_rgb(0x1a, 0x1a, 0x1b);
     v.faint_bg_color = Color32::from_rgb(0x36, 0x36, 0x39);
@@ -150,8 +150,10 @@ pub fn apply(ctx: &egui::Context) {
         w.bg_stroke = stroke;
         w.fg_stroke = Stroke::new(1.0_f32, fg);
     }
-    for w in [&mut v.widgets.noninteractive, &mut v.widgets.inactive, &mut v.widgets.hovered, &mut v.widgets.active, &mut v.widgets.open] {
-        w.rounding = Rounding::ZERO;
+    v.widgets.noninteractive.rounding = Rounding::ZERO;
+    // Buttons and other interactive widgets get slightly rounded corners.
+    for w in [&mut v.widgets.inactive, &mut v.widgets.hovered, &mut v.widgets.active, &mut v.widgets.open] {
+        w.rounding = Rounding::same(3.0);
     }
     ctx.set_visuals(v);
 

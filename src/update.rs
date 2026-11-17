@@ -18,7 +18,8 @@ use std::{
 pub const CURRENT: &str = env!("CARGO_PKG_VERSION");
 const REPO: &str = "M4XL1M1T/smash-launcher";
 const SUMS_NAME: &str = "SHA256SUMS.txt";
-const EXE_SUFFIX: &str = "-windows-x64.exe";
+/// Name of the exe asset in a release. GitHub does not allow spaces in asset names, so it uses a hyphen.
+const EXE_NAME: &str = "Smash-Launcher.exe";
 const MAX_EXE_BYTES: usize = 200 * 1024 * 1024;
 
 #[derive(Clone, Debug)]
@@ -81,7 +82,7 @@ fn parse_release(json: &Value, local: &str) -> Result<Option<Info>> {
             (pred(name) && trusted(url)).then(|| (name.to_string(), url.to_string()))
         })
     };
-    let (exe_name, exe_url) = find(&|n| n.ends_with(EXE_SUFFIX)).ok_or_else(|| anyhow!("Release contains no Windows file"))?;
+    let (exe_name, exe_url) = find(&|n| n == EXE_NAME).ok_or_else(|| anyhow!("Release contains no Windows file"))?;
     let (_, sums_url) = find(&|n| n == SUMS_NAME).ok_or_else(|| anyhow!("Release contains no {SUMS_NAME}, update rejected for security reasons"))?;
     Ok(Some(Info {
         version: tag.trim_start_matches('v').to_string(),
@@ -178,8 +179,8 @@ mod tests {
     #[test]
     fn sums_lookup() {
         let h = "a".repeat(64);
-        let s = format!("{h}  smash-launcher-v0.2.0-windows-x64.exe\n{}  other.exe\n", "b".repeat(64));
-        assert_eq!(expected_hash(&s, "smash-launcher-v0.2.0-windows-x64.exe"), Some(h));
+        let s = format!("{h}  Smash-Launcher.exe\n{}  other.exe\n", "b".repeat(64));
+        assert_eq!(expected_hash(&s, "Smash-Launcher.exe"), Some(h));
         assert_eq!(expected_hash(&s, "missing.exe"), None);
         assert_eq!(expected_hash("zzzz  x.exe", "x.exe"), None);
     }
@@ -191,14 +192,14 @@ mod tests {
             serde_json::json!({
                 "tag_name": "v0.2.0", "html_url": "https://github.com/x",
                 "assets": [
-                    {"name": "smash-launcher-v0.2.0-windows-x64.exe", "browser_download_url": exe_url},
+                    {"name": "Smash-Launcher.exe", "browser_download_url": exe_url},
                     {"name": "SHA256SUMS.txt", "browser_download_url": format!("{base}/SHA256SUMS.txt")},
                 ]
             })
         };
-        let info = parse_release(&rel(format!("{base}/smash-launcher-v0.2.0-windows-x64.exe")), "0.1.0").unwrap().unwrap();
+        let info = parse_release(&rel(format!("{base}/Smash-Launcher.exe")), "0.1.0").unwrap().unwrap();
         assert_eq!(info.version, "0.2.0");
-        assert!(parse_release(&rel("https://evil.example/a-windows-x64.exe".into()), "0.1.0").is_err());
-        assert!(parse_release(&rel(format!("{base}/x-windows-x64.exe")), "0.2.0").unwrap().is_none());
+        assert!(parse_release(&rel("https://evil.example/Smash-Launcher.exe".into()), "0.1.0").is_err());
+        assert!(parse_release(&rel(format!("{base}/Smash-Launcher.exe")), "0.2.0").unwrap().is_none());
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "smash-launcher"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2021"
 description = "Lightweight Minecraft launcher with account management"
 

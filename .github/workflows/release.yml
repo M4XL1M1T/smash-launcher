@@ -58,7 +58,7 @@ jobs:
 
       - name: Prepare release files
         run: |
-          NAME="smash-launcher-v${VERSION}-windows-x64.exe"
+          NAME="Smash-Launcher.exe"
           mkdir out
           cp target/release/smash-launcher.exe "out/$NAME"
           HASH=$(sha256sum "out/$NAME" | cut -d' ' -f1)
@@ -70,9 +70,9 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
             gh release create "$TAG" --draft --verify-tag --title "Smash Launcher $TAG" --notes-file out/RELEASE_NOTES.md \
-              "out/smash-launcher-v${VERSION}-windows-x64.exe" out/SHA256SUMS.txt
+              "out/Smash-Launcher.exe" out/SHA256SUMS.txt
           else
             gh release create "$TAG" --draft --target "$GITHUB_SHA" --title "Smash Launcher $TAG" --notes-file out/RELEASE_NOTES.md \
-              "out/smash-launcher-v${VERSION}-windows-x64.exe" out/SHA256SUMS.txt
+              "out/Smash-Launcher.exe" out/SHA256SUMS.txt
           fi
           echo "Draft release created. Review and publish it on the Releases page."

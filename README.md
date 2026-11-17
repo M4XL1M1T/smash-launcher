@@ -19,14 +19,14 @@ This is a personal, non-commercial hobby project. It is not affiliated with, end
 Get the executable only from the [Releases](../../releases) page of this repository. It is not code signed yet, so Windows SmartScreen may show an "unknown publisher" warning the first time: click **More info**, then **Run anyway**. Every release lists the SHA-256 checksum of the file, you can verify your download in PowerShell:
 
 ```
-Get-FileHash .\smash-launcher-vX.Y.Z-windows-x64.exe -Algorithm SHA256
+Get-FileHash .\Smash-Launcher.exe -Algorithm SHA256
 ```
 
 If the hash does not match the one in the release notes, do not run the file. You can also build the launcher yourself, see below.
 
 ## Updates
 
-On start the launcher asks GitHub for the latest release of this repository. If a newer version exists, a banner offers **Jetzt aktualisieren**: the launcher downloads the exe from the release, verifies it against `SHA256SUMS.txt` of the same release, replaces itself and restarts. Nothing is installed if the checksum does not match. The check can be turned off in the settings (tab Launcher), where you can also check manually. For this a release needs the asset `smash-launcher-vX.Y.Z-windows-x64.exe` and `SHA256SUMS.txt` (created by the release helper) and a tag `vX.Y.Z` that is higher than the installed version.
+On start the launcher asks GitHub for the latest release of this repository. If a newer version exists, a banner offers **Jetzt aktualisieren**: the launcher downloads the exe from the release, verifies it against `SHA256SUMS.txt` of the same release, replaces itself and restarts. Nothing is installed if the checksum does not match. The check can be turned off in the settings (tab Launcher), where you can also check manually. For this a release needs the asset `Smash-Launcher.exe` and `SHA256SUMS.txt` (created by the release helper) and a tag `vX.Y.Z` that is higher than the installed version.
 
 ## Releasing (maintainer)
 

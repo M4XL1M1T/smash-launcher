@@ -629,7 +629,7 @@ impl App {
         }
         let mut app = Self {
             installed: game::local_versions(&root),
-            selected: cfg.last_version.clone(),
+            selected: String::new(),
             root,
             cfg,
             sh,
@@ -880,6 +880,8 @@ impl App {
         let (sh, ctx, root, id, manifest) = (self.sh.clone(), ctx.clone(), self.root.clone(), self.selected.clone(), self.manifest.clone());
         let (ram, java_path, cid) = (self.cfg.ram_mb, self.cfg.java_path.clone(), self.cfg.client_id());
         let game_opts = self.cfg.game.clone();
+        // Nothing stays selected after a start.
+        self.selected.clear();
         std::thread::spawn(move || {
             let status = |t: &str, f: f32| {
                 let mut s = sh.lock().unwrap();
@@ -1025,12 +1027,21 @@ impl eframe::App for App {
                         remove = Some(i);
                     }
                 });
+                // The recent profiles hang off the account with a green tree line, so it is clear whose they are.
+                let top = ui.cursor().min;
+                let mut mids: Vec<f32> = vec![];
                 for v in &a.recent {
                     ui.horizontal(|ui| {
-                        ui.add_space(14.0);
+                        ui.add_space(20.0);
                         let active = a.key() == self.cfg.selected && self.selected == *v;
                         let text = egui::RichText::new(config::display(&self.cfg.names, v)).small();
-                        let resp = ui.selectable_label(active, text).on_hover_text("Click: select, double click: start");
+                        let (fill, stroke) = if active {
+                            (theme::GREEN_DARK, egui::Stroke::new(1.0_f32, theme::GREEN_LIGHT))
+                        } else {
+                            (egui::Color32::from_white_alpha(10), egui::Stroke::new(1.0_f32, egui::Color32::from_white_alpha(28)))
+                        };
+                        let resp = ui.add(egui::Button::new(text).fill(fill).stroke(stroke)).on_hover_text("Click: select, double click: start");
+                        mids.push(resp.rect.center().y);
                         if resp.clicked() || resp.double_clicked() {
                             pick_recent = Some((a.key(), v.clone()));
                         }
@@ -1038,6 +1049,15 @@ impl eframe::App for App {
                             launch_recent = true;
                         }
                     });
+                }
+                if let Some(last) = mids.last().copied() {
+                    let x = top.x + 8.0;
+                    let stroke = egui::Stroke::new(2.0_f32, theme::GREEN);
+                    let p = ui.painter();
+                    p.line_segment([egui::pos2(x, top.y - 4.0), egui::pos2(x, last)], stroke);
+                    for y in mids {
+                        p.line_segment([egui::pos2(x, y), egui::pos2(x + 9.0, y)], stroke);
+                    }
                 }
             }
             if let Some((k, v)) = pick_recent {
